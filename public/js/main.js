@@ -1,7 +1,7 @@
 /*
  * @Author: Gosoki Gosoki@github.com
  * @Date: 2023-11-23 19:55:41
- * @LastEditTime: 2024-07-08 15:55:04
+ * @LastEditTime: 2024-07-13 15:16:48
  * 
  * Copyright (c) 2024 by Gosoki , All Rights Reserved. 
  */
@@ -50,19 +50,7 @@ const constraints = {
 	},
 };
 
-//判断用户身份,设定视频参数
-if (navigator.userAgent.includes("OculusBrowser")) {
-	console.warn("VR Mode");
-	constraints.video = false;
-	document.querySelector('.mainVideoButton').childNodes[3].textContent = "Oculus";
-	// myVideo = document.createElement("video");
-	myVideo = document.createElement("p");
-	myVideo.textContent = "VRMode"
-} else {
-	console.warn("PC Mode");
-	myVideo = document.createElement("video");
-}
-
+myVideo = document.createElement("video");
 myVideo.id = "myVideo"; // 设置自己的视频ID
 myVideo.muted = true; // 将自己的视频静音
 
