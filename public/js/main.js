@@ -1,7 +1,7 @@
 /*
  * @Author: Gosoki Gosoki@github.com
  * @Date: 2023-11-23 19:55:41
- * @LastEditTime: 2024-07-13 15:16:48
+ * @LastEditTime: 2024-10-11 15:08:05
  * 
  * Copyright (c) 2024 by Gosoki , All Rights Reserved. 
  */
@@ -9,27 +9,7 @@
 const socket = io();
 const urlObject = new URL(window.location.href);
 const peerPort = parseInt(urlObject.port)+1;
-//var peer = new Peer() // 创建一个Peer对象
-const peer = new Peer(undefined, {
-	host: "/",
-	port: peerPort,
-	path: "/peerjs",
-	key: "peerjs",
-	debug: 0,
-	config: {
-		iceServers: [
-			// { url:"turn:us-0.turn.peerjs.com:3478",username: "peerjs", credential: "peerjsp" },
-			// { url: "turn:en-0.turn.peerjs.com:3478", username: "peerjs", credential: "peerjsp" },
-			// { url: "stun:stun.l.google.com:19302" },
-            // { url: "stun:stun1.l.google.com:19302" },
-            // { url: "stun:stun2.l.google.com:19302" },
-			// // { url: "stun:52.197.91.193:10000" },
-			// // { url: "turn:52.197.91.193:10000", username: "asd", credential: "123" },
-			// // { url: "stun:43.128.228.86:3478" },
-			// // { url: "turn:43.128.228.86:3478", username: "asd", credential: "123" },
-		],
-	},
-});
+// var peer = new Peer() // 创建一个Peer对象
 
 // 创建一个空对象，用于存储peer
 const peers = {};
@@ -44,8 +24,8 @@ const constraints = {
 		autoGainControl: true
 	},
 	video: {
-		width: { max:32 },
-		height: { max:24 },
+		// width: { max:32 },
+		// height: { max:24 },
 		frameRate: { max: 10 }
 	},
 };
@@ -57,11 +37,12 @@ myVideo.muted = true; // 将自己的视频静音
 ////socket & peer functions
 socket.on("broadcast_user_info", (msg) => {
 	let other_user_id = "body-" + msg[0];
-	let other_user_color = msg[1];
-	let other_user_name = msg[2];
-	let other_user_position = msg[3];
-	let other_user_msg = msg[4];
-	let other_user_rotation = msg[5];
+	let other_user_peerid = msg[1];
+	let other_user_color = msg[2];
+	let other_user_name = msg[3];
+	let other_user_position = msg[4];
+	let other_user_msg = msg[5];
+	let other_user_rotation = msg[6];
 
 	if (!document.getElementById(other_user_id)) {
 		let other_name_plate = document.createElement("a-text");
@@ -114,7 +95,8 @@ socket.on("broadcast_user_info", (msg) => {
 		other_user.childNodes[1].setAttribute("value", other_user_msg);
 		other_user.childNodes[1].setAttribute("color", other_user_color);
 		other_user.childNodes[2].setAttribute("src", "#");
-		other_user.childNodes[2].setAttribute("src", "#" + other_user_id.substring(5)); //去处前头"body-"
+		//other_user.childNodes[2].setAttribute("src", "#" + other_user_id.substring(5)); //去处前头"body-"
+		other_user.childNodes[2].setAttribute("src", "#" + other_user_peerid);
 
 		// 取消先前的定时器
 		if (other_user.timerId) {
@@ -126,123 +108,150 @@ socket.on("broadcast_user_info", (msg) => {
 	}
 });
 
-peer.on("open", (peerId) => {
-	// peer打开事件，在建立与服务器的连接时发出
-	my_peerid = peerId;
-	socket.emit("join-room", roomId, peerId, my_name); //发送给服务器自己的peer信息
-	console.warn("myInfo=", roomId, peerId, my_name);
-	showMessage("roomId:"+roomId)
-	showMessage("peerId:"+peerId)
-	showMessage("my_name:"+my_name)
-});
-
 let myVideoStream; //用于存储自己的视频流,方便通过按钮更改设置
 let mediaRecorder;
+let audioStream
 let audioChunks = [];
 
-navigator.mediaDevices.getUserMedia(constraints)
-	// 获取用户媒体设备
-	.then((stream) => {
-		//检查当前视频设置
-		if (stream.getVideoTracks()[0]){
-			//默认关闭自己视频
-			stream.getVideoTracks()[0].enabled = true;
-			// 获取视频轨道的设置
-			var videoTrack = stream.getVideoTracks()[0];
-			var videoSettings = videoTrack.getSettings();
-			// 输出实际的分辨率
-			console.warn('Actual video resolution: ' + videoSettings.width + 'x' + videoSettings.height);
-			}
+let joinrommid = roomId 
 
-		myVideoStream = stream;
-		addVideoStream(myVideo, stream);
+	// myVideoStream = null;
+	// navigator =	null;
+	// if (!peer.destroyed){
+	// 	peer.destroy();
+	// 	console.warn("peer.destroyed")
+	// }
+	// peer = null;
+	// console.warn("peer.makenew")
+	peer = new Peer(undefined, {
+		host: "/",
+		port: peerPort,
+		path: "/peerjs",
+		key: "peerjs",
+		debug: 0,
+		config: {
+			iceServers: [
+				// { url:"turn:us-0.turn.peerjs.com:3478",username: "peerjs", credential: "peerjsp" },
+				// { url: "turn:en-0.turn.peerjs.com:3478", username: "peerjs", credential: "peerjsp" },
+				// { url: "stun:stun.l.google.com:19302" },
+				// { url: "stun:stun1.l.google.com:19302" },
+				// { url: "stun:stun2.l.google.com:19302" },
+				// // { url: "stun:52.197.91.193:10000" },
+				// // { url: "turn:52.197.91.193:10000", username: "asd", credential: "123" },
+				// // { url: "stun:43.128.228.86:3478" },
+				// // { url: "turn:43.128.228.86:3478", username: "asd", credential: "123" },
+			],
+		},
+	});
 
-		peer.on("call", (call) => {
-			// 监听peer.call事件
-			console.warn("call = ", call);
-			call.answer(stream); // 接听来电,返回自己视频
-			const video = document.createElement("video"); // 创建一个video元素
-			video.id = call.peer; // 设置video元素ID=对方peerId
-			call.on("stream", (otherUserVideoStream) => {
-				// 监听peer.call stream事件
-				addVideoStream(video, otherUserVideoStream); // 将新用户的视频流添加到videoGrid中
-				call.on("close", () => {
-					video.remove();
-					console.log("削除する")
-				});
-				peers[call.peer] = call;
-			});
-			
-		});
+	peer.on("open", (peerId) => {
+		// peer打开事件，在建立与服务器的连接时发出
+		my_peerid = peerId;
+		socket.emit("join-room", joinrommid, peerId, my_name); //发送给服务器自己的peer信息
+		console.warn("myInfo=", joinrommid, peerId, my_name);
+		showMessage("roomId:"+joinrommid)
+		showMessage("peerId:"+peerId)
+		showMessage("my_name:"+my_name)
+	});
 
-		socket.on("user-connected", (otherUserId, userName) => {
-			// 监听用户连接事件,获取对方用户peerID
-			// connectToNewUser(otherUserId, stream); //调用peer.call(对方ID,自己视频)连接新用户
-			let makeCallTimer;
-			let makeCallCounter = 0;
-			console.warn("Newuser-connected", otherUserId);
-			if ((!peer.connections[otherUserId])) {
-				showMessage("userconnect —>" + userName)
-				showMessage("try connect —>" + userName)
-				const makeCall = () => {
-					if (makeCallCounter > 5) { clearInterval(makeCallTimer) };
-					makeCallCounter++;
-					console.log(makeCallCounter + "*recall:" + otherUserId)
-					var call = peer.call(otherUserId, stream);
-					const video = document.createElement("video");
-					video.id = otherUserId;
-					call.on("stream", (otherUserVideoStream) => {
-						showMessage("get VideoStream")
-						addVideoStream(video, otherUserVideoStream);
-						clearInterval(makeCallTimer);
-						console.warn("stream", otherUserVideoStream)
-						console.warn("stream", otherUserVideoStream.getVideoTracks()[0])
-					});
+	navigator.mediaDevices.getUserMedia(constraints)
+		// 获取用户媒体设备
+		.then((stream) => {
+			//检查当前视频设置
+			if (stream.getVideoTracks()[0]){
+				//默认关闭自己视频
+				stream.getVideoTracks()[0].enabled = true;
+				// 获取视频轨道的设置
+				var videoTrack = stream.getVideoTracks()[0];
+				var videoSettings = videoTrack.getSettings();
+				// 输出实际的分辨率
+				console.warn('Actual video resolution: ' + videoSettings.width + 'x' + videoSettings.height);
+				}
+
+			myVideoStream = stream;
+			addVideoStream(myVideo, stream);
+
+			peer.on("call", (call) => {
+				// 监听peer.call事件
+				console.warn("call = ", call);
+				call.answer(stream); // 接听来电,返回自己视频
+				const video = document.createElement("video"); // 创建一个video元素
+				video.id = call.peer; // 设置video元素ID=对方peerId
+				call.on("stream", (otherUserVideoStream) => {
+					// 监听peer.call stream事件
+					addVideoStream(video, otherUserVideoStream); // 将新用户的视频流添加到videoGrid中
 					call.on("close", () => {
 						video.remove();
 						console.log("削除する")
 					});
-					peers[otherUserId] = call;
+					peers[call.peer] = call;
+				});
+				
+			});
+
+			socket.on("user-connected", (otherUserId, userName) => {
+				// 监听用户连接事件,获取对方用户peerID
+				// connectToNewUser(otherUserId, stream); //调用peer.call(对方ID,自己视频)连接新用户
+				let makeCallTimer;
+				let makeCallCounter = 0;
+				console.warn("Newuser-connected", otherUserId);
+				let connectedflag = true;
+				if (peer.connections[otherUserId]) {
+					if (peer.connections[otherUserId].length > 0){
+						connectedflag = false;
+					}
+				}
+				console.warn("peer.connections",peer.connections)
+				console.warn("connectedflag",connectedflag)
+
+				if ( connectedflag ) {
+					showMessage("userconnect —>" + userName)
+					showMessage("try connect —>" + userName)
+					const makeCall = () => {
+						if (makeCallCounter > 5) { clearInterval(makeCallTimer) };
+						makeCallCounter++;
+						console.log(makeCallCounter + "*recall:" + otherUserId)
+						var call = peer.call(otherUserId, stream);
+						const video = document.createElement("video");
+						video.id = otherUserId;
+						call.on("stream", (otherUserVideoStream) => {
+							showMessage("get VideoStream")
+							addVideoStream(video, otherUserVideoStream);
+							clearInterval(makeCallTimer);
+							console.warn("stream", otherUserVideoStream)
+							console.warn("stream", otherUserVideoStream.getVideoTracks()[0])
+						});
+						call.on("close", () => {
+							video.remove();
+							console.log("削除する")
+						});
+						peers[otherUserId] = call;
+					};
+					makeCallTimer = setInterval(makeCall, 3000);
+					console.log("User " + userName + " connected!");
+					showMessage("User: " + userName + " connected!")
 				};
-				makeCallTimer = setInterval(makeCall, 6000);
-				console.log("User " + userName + " connected!");
-				showMessage("User: " + userName + " connected!")
+			});
+
+			audioStream = new MediaStream(stream.getAudioTracks());
+			mediaRecorder = new MediaRecorder(audioStream);
+			mediaRecorder.ondataavailable = event => {
+				if (event.data.size > 0) {
+				audioChunks.push(event.data);
+				}
 			};
-			
-			// const call = peer.call(otherUserId, stream);
-			// const video = document.createElement("video");
-			// video.id = otherUserId;
-			// call.on("stream", (otherUserVideoStream) => {
-			// 	addVideoStream(video, otherUserVideoStream);
-			// });
-			// call.on("close", () => {
-			// 	video.remove();
-			// 	console.log("我要删了")
-			// });
-			// peers[otherUserId] = call;
-			// console.log("User " + userName + " connected!");
-			// showMessage("User: " + userName + " connected!")
-		});
 
-		const audioStream = new MediaStream(stream.getAudioTracks());
-        mediaRecorder = new MediaRecorder(audioStream);
-        mediaRecorder.ondataavailable = event => {
-            if (event.data.size > 0) {
-            audioChunks.push(event.data);
-            }
-        };
+			mediaRecorder.onstop = () => {
+				saveButton.disabled = false;
+			};
 
-        mediaRecorder.onstop = () => {
-            saveButton.disabled = false;
-        };
+			//mediaRecorder.start();
+		})
+		.catch(error => {
+		console.error("获取音频设备失败:", error);
+		},(err) => console.log(err)
+		).catch(function (err) { console.log(err.name + ": " + err.message); });
 
-        //mediaRecorder.start();
-        })
-        .catch(error => {
-        console.error("获取音频设备失败:", error);
-	},
-		(err) => console.log(err)
-	).catch(function (err) { console.log(err.name + ": " + err.message); });
 
 socket.on("broadcast_aihint", (aihint) => {
 	console.log("AI救我")
@@ -291,9 +300,16 @@ socket.on("broadcast_aidraw_dalle", (aihint) => {
 
 
 socket.on("broadcast_drawbackground", (aihint) => {
-	let background = document.getElementById("background");
-	console.log("drawbackground",aihint)
-	background.setAttribute("color", aihint);
+	let background;
+
+	try {
+		background = document.getElementById("chat"+aihint[0]);
+	} catch (error) {
+		console.warn(error)
+	}
+
+	console.log("drawbackground",background,aihint[1])
+	background.setAttribute("color", aihint[1]);
 });
 
 
@@ -307,13 +323,14 @@ socket.on("broadcast_aidraw_reason", (msg) => {
 
 socket.on("user-disconnected", (otherUserInfo) => {
 	let otherUserId = otherUserInfo[0];
-	let otherUserName = otherUserInfo[1];
+	let otherUserpeerId = otherUserInfo[1];
+	let otherUserName = otherUserInfo[2];
 	// 监听用户断开连接事件
 	let del_body = document.getElementById("body-" + otherUserId);
 	if (del_body) document.querySelector("a-scene").removeChild(del_body);
 
-	if (peers[otherUserId]) peers[otherUserId].close();
-	if (peers[otherUserId]) delete peers[otherUserId] // 如果peer存在，则关闭peer
+	if (peers[otherUserpeerId]) peers[otherUserpeerId].close();
+	if (peers[otherUserpeerId]) delete peers[otherUserpeerId] // 如果peer存在，则关闭peer
 
 	console.log(otherUserName + ":logout!");
 	showMessage(otherUserName + ":logout!")
@@ -468,6 +485,35 @@ document.getElementById("drawbackgroundButton").addEventListener("click", functi
 });
 
 
+function joinChatRoom() {
+	const selectedRoom = document.getElementById('roomSelector').value;
+	joinrommid = selectedRoom
+	// socket.emit("join-chatroom", selectedRoom, my_peerid, my_name);
+	socket.emit("leave-room", roomId);
+	if (peers) {
+		console.warn("peers", peers)
+		for (peerId in peers) {
+			peers[peerId].close();
+			delete peers[peerId]
+			console.warn("close", peerId)
+		}
+	}
+	alert(`Joining ${selectedRoom}`);
+	// webRTCConnect(selectedRoom)
+	socket.emit("join-room", joinrommid, my_peerid, my_name); //发送给服务器自己的peer信息
+	document.getElementById('roomSelector').disabled = true;
+	document.getElementById('joinChatRoomButton').disabled = true;
+	document.getElementById('leaveChatRoomButton').disabled = false;
+}
+
+function leaveChatRoom() {
+	// const selectedRoom = document.getElementById('roomSelector').value;
+	socket.emit("leave-room", joinrommid);
+	document.getElementById('roomSelector').disabled = false;
+	document.getElementById('joinChatRoomButton').disabled = false;
+	document.getElementById('leaveChatRoomButton').disabled = true;
+	alert(`Leaving ${joinrommid}`);
+}
 
 ////Web Speech API Functions
 const transcription = document.getElementById('transcription');
@@ -594,7 +640,7 @@ function vr_function() {
 				transcription.textContent = transcript + transcription.textContent;
 				// document.getElementById('result_text').innerHTML = results[i][0].transcript;
 				vr_function();
-				socket.emit("seed_my_speech_to_server", [my_peerid,my_name,transcript]);
+				socket.emit(`seed_my_speech_to_server_${joinrommid}`, [my_peerid,my_name,transcript]);
 				aframeMutlByte(transcript)
 			}
 			else

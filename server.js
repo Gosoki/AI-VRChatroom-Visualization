@@ -1,3 +1,5 @@
+
+
 // socket.emit: 向当前连接的客户端发送消息。
 // io.emit: 向所有连接的客户端发送消息。
 // socket.broadcast.emit: 向除当前连接的客户端外的所有客户端发送消息。
@@ -11,6 +13,9 @@ const fs = require('fs');
 const path = require('path');
 const https = require('https');
 const dotenv = require("dotenv"); // 環境変数を扱うdotenvモジュールをインポート
+
+const { SocksProxyAgent } = require('socks-proxy-agent');
+const proxyAgent = new SocksProxyAgent('socks5://127.0.0.1:10808');
 // const fetch = require('node-fetch');
 
 dotenv.config(); // 環境変数を.envファイルから読み込む
@@ -100,24 +105,57 @@ const checkInterval = 20*1000; //1000=1SECOND
 
 const userInfoMap = new Map();
 const userPeerInfo = {};
+const mainspace = "mainspace";
+
 
 //////Socket.IO FUNCTIONS Start//////
 io.on('connection', (socket) => {
+	
+	socket.join(mainspace)
 	console.log("connection : ", socket.id);
+
+	socket.on("seed_my_info_to_server", (msg) => {
+		//console.log(msg)
+		let user_id = msg[0];
+		let user_color = msg[1];
+		let user_name = msg[2];
+		let user_position = msg[3];
+		let user_msg = msg[4];
+		let user_rotation = msg[5];
+		socket.to(mainspace).emit('broadcast_user_info', [socket.id,user_id, user_color, user_name, user_position, user_msg,user_rotation]);
+	});
+
+
 	socket.on('join-room', (roomId, userId, userName) => {
-		//console.log("roomId, userId, userName=", roomId, userId, userName);
+		console.log("roomId, userId, userName=", roomId, userId, userName);
 		userInfoMap.set(socket.id,[roomId,userId,userName]);// 将用户和关联的 roomId 存储在映射中
 		userPeerInfo[userId]=userName;
 		socket.join(roomId)
+		console.log(socket.rooms)
 		console.log(userInfoMap)
-		// for (const [key, value] of userInfoMap) {
-		// 	console.log(`User: ${value[2]} in ${value[0]}! socketId:${key},peerId:${value[1]}`);
-		//   }
+
 		socket.to(roomId).emit('user-connected', userId, userName)
 		io.emit('broadcast_usermap', Object.values(userPeerInfo))
 
+		socket.on('leave-room', () => {
+			socket.leave(roomId);
+			socket.to(mainspace).emit('user-disconnected', [socket.id,userId,userName])
+			
+			userInfoMap.delete(socket.id);// 从映射中删除用户
+			console.log("logout:", userName,socket.id,userId)
+			console.log(userInfoMap)
+			
+			//从字典中删除用户
+			if (userId in userPeerInfo) {
+				delete userPeerInfo[userId];
+			}
+			
+			console.log(socket.rooms)
+			io.emit('broadcast_usermap', Object.values(userPeerInfo))
+		})
+
 		socket.on('disconnect', () => {
-			socket.to(roomId).emit('user-disconnected', [userId,userName])
+			socket.to(mainspace).emit('user-disconnected', [socket.id,userId,userName])
 			userInfoMap.delete(socket.id);// 从映射中删除用户
 			console.log("logout:", userName,socket.id,userId)
 			console.log(userInfoMap)
@@ -129,64 +167,41 @@ io.on('connection', (socket) => {
 			io.emit('broadcast_usermap', Object.values(userPeerInfo))
 		})
 
-		socket.on('message', (message) => {
-			console.log("message =", message);
-			io.to(roomId).emit('createMessage', message, userId)
-		})
 
-		socket.on("seed_my_info_to_server", (msg) => {
-			//console.log(msg)
-			let user_id = msg[0];
-			let user_color = msg[1];
-			let user_name = msg[2];
-			let user_position = msg[3];
-			let user_msg = msg[4];
-			let user_rotation = msg[5];
-			socket.to(roomId).emit('broadcast_user_info', [user_id, user_color, user_name, user_position, user_msg,user_rotation]);
-		});
-
-		//定义AI连续相关
-		let aidraw_count_needs = 500;
+		//定义AI连续画画相关
+		let aidraw_count_needs = 1000;
 		let aidraw_count = 0;
 		let aidrawbackground_count_needs = 1;
 		let aidrawbackground_count = 0;
 
-        socket.on('seed_my_speech_to_server', async (msg) => {
-			const userRoomId = userInfoMap.get(socket.id)[0]; // 获取关联的 roomId
-            speechText['textdata'].push({
+        socket.on(`seed_my_speech_to_server_${roomId}`, async (msg) => {
+			//const userRoomId = userInfoMap.get(socket.id)[0]; // 获取关联的 roomId
+			if (!speechText[roomId]) {
+				let starttime = Date.now();
+				speechText[roomId] = [];
+			}
+            speechText[roomId].push({
                 userid: msg[0],
                 username:msg[1],
                 msg: msg[2],
                 timestamp: Date.now(),
             });
+			
+			console.log(`${roomId}@u_[${msg[1]}]:${msg[2]}`)
+			// console.log(speechText)
 
-			console.log(`user[${msg[1]}]:${msg[2]}`)
-            clearTimeout(timer);
+			const lastIndex = Math.max(0, speechText[roomId].length - 5); // 获取最后30条数据的起始索引
+			const last30Items = speechText[roomId].slice(lastIndex); // 提取最后30条数据
+			const last30SpeechText = last30Items.map(item => item.timestamp + ': ' + item.msg);
+			console.log(last30SpeechText)
 
-            timer = setTimeout(function() {
-				const last30SpeechText = []
-				const lastIndex = Math.max(0, speechText.textdata.length - 30); // 获取最后30条数据的起始索引
-				const last30Items = speechText.textdata.slice(lastIndex); // 提取最后30条数据
-				last30Items.forEach(item => {
-					last30SpeechText.push(item.username + ': ' + item.msg)
-				});
-
-				(async () => {
-				try {
-					const aihint = await sendToGPT(last30SpeechText,"Topics");
-					console.log(`server->[${roomId}@all]:${aihint}`);
-					io.to(roomId).emit('broadcast_aihint', aihint);
-				} catch (error) {
-					console.error(error);
-				}
-				})()
-                ;
-                console.log('speechText 内容在过去的 %d 秒内未发生变化', checkInterval / 1000);
-            }, checkInterval);
+			// 使用示例
+  			console.log(`平均发言间隔（秒）：${calculateAverageInterval(last30SpeechText)}`);
+			console.log(`输出值：${getSpeakingScore((calculateAverageInterval(last30SpeechText)))}`);
 
             //写入json
             if (fs.existsSync(filePath)) {
-                updateFileData(filePath, msg);
+                updateFileData(filePath, msg,roomId);
             }
 
 			//自动ai图
@@ -194,12 +209,12 @@ io.on('connection', (socket) => {
 				aidraw_count++;
 			}else{
 				(async () => {
-					const lastIndex = Math.max(0, speechText.textdata.length - 30); // 获取最后30条数据的起始索引
-					const last30Items = speechText.textdata.slice(lastIndex); // 提取最后30条数据
+					const lastIndex = Math.max(0, speechText[roomId].length - 30); // 获取最后30条数据的起始索引
+					const last30Items = speechText[roomId].slice(lastIndex); // 提取最后30条数据
 					const last30SpeechText = last30Items.map(item => item.username + ': ' + item.msg);
 					try {
-						const aihint = await gpt2img(last30SpeechText,"Draw_continue")
-						io.to(roomId).emit('broadcast_aidraw_continue', aihint);
+						const aihint = await sendToGPT(last30SpeechText,"Draw_continue")
+						io.to(roomId).emit('broadcast_aihint', aihint);
 						console.log("broadcast_aidraw_continue!")
 					} catch (error) {
 						console.error(error);
@@ -208,18 +223,18 @@ io.on('connection', (socket) => {
 				aidraw_count = 0;
 			}
 
-			//自动ai背景
+			//自动ai连续背景色
 			if (aidrawbackground_count < aidrawbackground_count_needs){
 				aidrawbackground_count++;
 			}else{
 				(async () => {
-					const lastIndex = Math.max(0, speechText.textdata.length - 30); // 获取最后30条数据的起始索引
-					const last30Items = speechText.textdata.slice(lastIndex); // 提取最后30条数据
+					const lastIndex = Math.max(0, speechText[roomId].length - 30); // 获取最后30条数据的起始索引
+					const last30Items = speechText[roomId].slice(lastIndex); // 提取最后30条数据
 					const last30SpeechText = last30Items.map(item => item.username + ': ' + item.msg);
 					try {
 						const aihint = await sendToGPT(last30SpeechText,"Draw_background_continue");
 						// console.log(`server->[${userRoomId}@user]:${aihint}`);
-						socket.emit('broadcast_drawbackground', aihint);
+						socket.emit('broadcast_drawbackground', [roomId,aihint]);
 						//io.to(userRoomId).emit('broadcast_aihint', aihint);
 					} catch (error) {
 						console.error(error);
@@ -254,7 +269,7 @@ io.on('connection', (socket) => {
 			const lastIndex = Math.max(0, speechText.textdata.length - 30); // 获取最后30条数据的起始索引
 			const last30Items = speechText.textdata.slice(lastIndex); // 提取最后30条数据
 			const last30SpeechText = last30Items.map(item => item.username + ': ' + item.msg);
-			console.log(speechText)
+			// console.log(speechText)
 			console.log(last30SpeechText);
 			// (async () => {
 			// try {
@@ -298,7 +313,7 @@ io.on('connection', (socket) => {
 			const lastIndex = Math.max(0, speechText.textdata.length - 30); // 获取最后30条数据的起始索引
 			const last30Items = speechText.textdata.slice(lastIndex); // 提取最后30条数据
 			const last30SpeechText = last30Items.map(item => item.username + ': ' + item.msg);
-			console.log(speechText)
+			// console.log(speechText)
 			console.log(last30SpeechText);
 			(async () => {
 				try {
@@ -317,20 +332,63 @@ io.on('connection', (socket) => {
 });
 //////Socket.IO FUNCTIONS End//////
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 //////Ai FUNCTIONS Start//////
 //发送给gpt sendToGPT();
-const { Configuration, OpenAIApi } = require("openai");
-const configuration = new Configuration({
-    apiKey: process.env.OPENAI_APIKEY,
-    basePath: process.env.OPENAI_BASEPATH
-});
-const openai = new OpenAIApi(configuration);
+// const { Configuration, OpenAIApi } = require("openai");
+// const configuration = new Configuration({
+//     apiKey: process.env.OPENAI_APIKEY,
+//     basePath: process.env.OPENAI_BASEPATH,
+// 	httpAgent: proxyAgent,
+// 	httpsAgent: proxyAgent
+// });
+// const openai = new OpenAIApi(configuration);
+
+// import OpenAI from 'openai';
+const { OpenAI } = require("openai");
+const { rootCertificates } = require('tls');
+const openai = new OpenAI({
+	apiKey: process.env.OPENAI_APIKEY,
+    // basePath: process.env.OPENAI_BASEPATH,
+	httpAgent: proxyAgent,
+	httpsAgent: proxyAgent
+})
+
 
 async function sendToGPT(speechText,mode) {
 	switch (mode) {
 		case "Topics": //话题
 			try {
-			const completion = await openai.createChatCompletion({
+			const completion = await openai.chat.completions.create({
 				model: "gpt-3.5-turbo",
 				messages: [
 					{"role": "system", 
@@ -343,8 +401,8 @@ async function sendToGPT(speechText,mode) {
 					],
 				});
 				console.log(speechText)
-				console.log(completion.data.choices[0].message,completion.data.usage);
-				return completion.data.choices[0].message.content
+				console.log(completion.choices[0].message,completion.usage);
+				return completion.choices[0].message.content
 			} catch (error) {
 			console.error('发送给 GPT时出错：', error);
 			}
@@ -352,7 +410,7 @@ async function sendToGPT(speechText,mode) {
 
 		case "MainPoints": //总结
 			try {
-			const completion = await openai.createChatCompletion({
+			const completion = await openai.chat.completions.create({
 				model: "gpt-3.5-turbo",
 				messages: [
 					{"role": "system",
@@ -365,8 +423,8 @@ async function sendToGPT(speechText,mode) {
 					],
 				});
 				console.log(speechText)
-				console.log(completion.data.choices[0].message,completion.data.usage);
-				return completion.data.choices[0].message.content
+				console.log(completion.choices[0].message,completion.usage);
+				return completion.choices[0].message.content
 			} catch (error) {
 			console.error('发送给 GPT时出错：', error);
 			}
@@ -374,7 +432,7 @@ async function sendToGPT(speechText,mode) {
 
 		case "Draw_continue": //dalle画画 连续
 			try {
-			const completion = await openai.createChatCompletion({
+				const completion = await openai.chat.completions.create({
 				model: "gpt-4",
 				messages: [
 					{"role": "system",
@@ -389,8 +447,8 @@ async function sendToGPT(speechText,mode) {
 					],
 				});
 				console.log(speechText)
-				console.log(completion.data.choices[0].message,completion.data.usage);
-				return completion.data.choices[0].message.content
+				console.log(completion.choices[0].message,completion.usage);
+				return completion.choices[0].message.content
 			} catch (error) {
 			console.error('发送给 GPT时出错：', error);
 			}
@@ -398,7 +456,7 @@ async function sendToGPT(speechText,mode) {
 		
 		case "Draw": //dalle画画
 			try {
-			const completion = await openai.createChatCompletion({
+				const completion = await openai.chat.completions.create({
 				model: "gpt-4",
 				messages: [
 					{"role": "system",
@@ -413,8 +471,8 @@ async function sendToGPT(speechText,mode) {
 					],
 				});
 				console.log(speechText)
-				console.log(completion.data.choices[0].message,completion.data.usage);
-				return completion.data.choices[0].message.content
+				console.log(completion.choices[0].message,completion.usage);
+				return completion.choices[0].message.content
 			} catch (error) {
 			console.error('发送给 GPT时出错：', error);
 			}
@@ -422,7 +480,7 @@ async function sendToGPT(speechText,mode) {
 
 			case "Draw_sd": //SD画画
 			try {
-			const completion = await openai.createChatCompletion({
+				const completion = await openai.chat.completions.create({
 				model: "gpt-4",
 				messages: [
 					{"role": "system",
@@ -439,16 +497,16 @@ async function sendToGPT(speechText,mode) {
 					],
 				});
 				console.log(speechText)
-				console.log(completion.data.choices[0].message,completion.data.usage);
-				return completion.data.choices[0].message.content
+				console.log(completion.choices[0].message,completion.usage);
+				return completion.choices[0].message.content
 			} catch (error) {
 			console.error('发送给 GPT时出错：', error);
 			}
 			break;
 
-			case "Draw_background_continue": //画画
+			case "Draw_background_continue": //连续背景色
 			try {
-			const completion = await openai.createChatCompletion({
+				const completion = await openai.chat.completions.create({
 				model: "gpt-4",
 				messages: [
 					{"role": "system",
@@ -456,7 +514,7 @@ async function sendToGPT(speechText,mode) {
 					{"role": "user",
 					"content": `我会给你一段用户间的对话,
 					针对对话的内容，而无需关注有多少用户参与在聊天，按对话中的内容给我返回颜色代码, 根据话题的积极性与消极性，给与对应的代码颜色代码,如果消极给暖色调，积极给冷色调。不要给深红深蓝,偏温和的色调。
-					如果你无法判断颜色，请返回：#d3d3d3 
+					请优先根据对话中的内容返回颜色代码，如果你无法判断颜色，请返回：#d3d3d4 
 					请只返回颜色代码，返回值参考如下: #f0f0f0`},
 					{"role": "assistant",
 					"content": " 了解しました。提供された設定に基づいて、#xxxxxxのみを回答します。"},
@@ -464,8 +522,8 @@ async function sendToGPT(speechText,mode) {
 					],
 				});
 				console.log(speechText)
-				console.log(completion.data.choices[0].message,completion.data.usage);
-				return completion.data.choices[0].message.content
+				console.log(completion.choices[0].message,completion.usage);
+				return completion.choices[0].message.content
 			} catch (error) {
 			console.error('发送给 GPT时出错：', error);
 			}
@@ -476,15 +534,15 @@ async function sendToGPT(speechText,mode) {
 
 // 调用 dalle 生成图像
 async function dalleGenerateImage(prompt) {
-    const response = await openai.createImage({
+    const response = await openai.images.generate({
         model: "dall-e-3",
         prompt: prompt,
         n: 1,  // 生成图像的数量
 		response_format:"b64_json",
         size: "1024x1024",  // 图像的尺寸
     });
-
-    const imageUrl = response.data.data[0].b64_json;
+	//console.log(response)
+    const imageUrl = response.data[0].b64_json;
     // console.log("Generated image URL:", imageUrl);
     // const res = await fetch(imageUrl);
     // const fileStream = fs.createWriteStream('generated_image.png');
@@ -528,7 +586,7 @@ async function sdGenerateImage(prompt) {
 
 	if (!response.ok) {
 		const errorText = await response.text();
-		throw new Error(`API request failed: ${errorText}`);
+		throw new Error("API request failed: ${errorText}");
 	}
 
 	const responseData = await response.json();
@@ -584,13 +642,15 @@ async function gpt2img_sd(Text,mode){
 //////Ai FUNCTIONS End//////
 
 //////Write Json ASYNC FUNCTIONS Start//////
-async function updateFileData(filename, msg) {
+async function updateFileData(filename, msg,roomid) {
     try {
     const fileData = await fs.promises.readFile(filename, 'utf8');
     // 将JSON内容解析为JavaScript对象
     const jsonData = JSON.parse(fileData);
     // 进行数据操作，例如添加新的用户消息记录
-    jsonData.textdata.push({
+	
+	if (!jsonData[roomid]) jsonData[roomid] = [];
+    jsonData[roomid].push({
         userid: msg[0],
         username:msg[1],
         msg: msg[2],
@@ -605,6 +665,34 @@ async function updateFileData(filename, msg) {
     }
 }
 //////Write Json ASYNC FUNCTIONS End//////
+
+
+
+// 计算发言间隔的函数
+function calculateAverageInterval(messages) {
+	if (messages.length < 2) return 0;
+  
+	// 提取时间戳（单位：秒）
+	const timestamps = messages.map(msg => parseInt(msg.split(':')[0]) / 1000);
+  
+	// 计算相邻消息之间的时间间隔
+	let intervals = [];
+	for (let i = 1; i < timestamps.length; i++) {
+	  intervals.push(timestamps[i] - timestamps[i - 1]);
+	}
+  
+	// 计算平均间隔
+	const averageInterval = intervals.reduce((sum, interval) => sum + interval, 0) / intervals.length;
+	return averageInterval;
+  }
+  
+
+  // 计算发言分值函数
+function getSpeakingScore(averageInterval) {
+	if (averageInterval <= 2) return 1;       // 2 秒以内间隔，分值为 1
+	if (averageInterval >= 15) return 0.1;    // 15 秒或更长间隔，分值为 0.1
+	return 1 - (averageInterval - 2) * 0.065;  // 根据间隔，分值线性递减
+  }
 
 
 server.listen(PORT, () => console.log(`Listening on port ${PORT}`))
