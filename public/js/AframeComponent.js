@@ -27,6 +27,7 @@ AFRAME.registerComponent("player", {
         this.my_rot_last = {x:0,y:0}
     },
     tick: function () {
+
         let my_ball = document.getElementById("my_ball");
         let my_color = my_ball.getAttribute("color");
         let my_msg = document.getElementById("my_msg").innerText

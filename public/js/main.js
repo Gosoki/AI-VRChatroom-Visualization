@@ -1,7 +1,7 @@
 /*
  * @Author: Gosoki Gosoki@github.com
  * @Date: 2023-11-23 19:55:41
- * @LastEditTime: 2024-10-11 15:08:05
+ * @LastEditTime: 2024-11-21 20:04:02
  * 
  * Copyright (c) 2024 by Gosoki , All Rights Reserved. 
  */
@@ -253,6 +253,7 @@ let joinrommid = roomId
 		).catch(function (err) { console.log(err.name + ": " + err.message); });
 
 
+
 socket.on("broadcast_aihint", (aihint) => {
 	console.log("AI救我")
 	//alert("这是一个弹窗！");
@@ -272,13 +273,14 @@ socket.on("broadcast_aidraw_continue", (aihint) => {
 	ai_draw_continue.setAttribute("src", "data:image/png;base64,"+aihint);
 });
 
+//展示收到的ai图片
 let ai_draw_sd = document.createElement("a-box");
 ai_draw_sd.setAttribute("id", "aidraw");
-ai_draw_sd.setAttribute("position", "-3.5 1 -3");
+ai_draw_sd.setAttribute("position", "7 1 -3");
 ai_draw_sd.setAttribute("width", "2");
 ai_draw_sd.setAttribute("height", "2");
 ai_draw_sd.setAttribute("depth", "0.01");
-ai_draw_sd.setAttribute("rotation", "0 45 0");
+ai_draw_sd.setAttribute("rotation", "0 0 0");
 document.querySelector("a-scene").appendChild(ai_draw_sd);
 socket.on("broadcast_aidraw_sd", (aihint) => {
 	// console.log("aidrawbase64",aihint)
@@ -287,11 +289,11 @@ socket.on("broadcast_aidraw_sd", (aihint) => {
 
 let ai_draw_dalle = document.createElement("a-box");
 ai_draw_dalle.setAttribute("id", "aidraw");
-ai_draw_dalle.setAttribute("position", "-3.5 3 -3");
+ai_draw_dalle.setAttribute("position", "7 3 -3");
 ai_draw_dalle.setAttribute("width", "2");
 ai_draw_dalle.setAttribute("height", "2");
 ai_draw_dalle.setAttribute("depth", "0.01");
-ai_draw_dalle.setAttribute("rotation", "0 45 0");
+ai_draw_dalle.setAttribute("rotation", "0 0 0");
 document.querySelector("a-scene").appendChild(ai_draw_dalle);
 socket.on("broadcast_aidraw_dalle", (aihint) => {
 	// console.log("aidrawbase64",aihint)
@@ -299,17 +301,60 @@ socket.on("broadcast_aidraw_dalle", (aihint) => {
 });
 
 
-socket.on("broadcast_drawbackground", (aihint) => {
-	let background;
+socket.on("broadcast_room_aiimg", (aihint) => {
+	//SERVER.emit('broadcast_room_aiimg', [roomId,aihint]);
+	let backgroundimg;
+	try {
+		backgroundimg = document.getElementById("chatimg"+aihint[0]);
+	} catch (error) {
+		console.warn(error)
+	}
+	console.log("drawbackground",backgroundimg,aihint[1])
+	backgroundimg.setAttribute("src", "data:image/png;base64,"+aihint[1]);
+});
 
+
+socket.on("broadcast_drawbackground", (aihint) => {
+	//SERVER.emit('broadcast_drawbackground', [roomId,aihint]);
+	let background;
 	try {
 		background = document.getElementById("chat"+aihint[0]);
 	} catch (error) {
 		console.warn(error)
 	}
+	background.setAttribute("color", aihint[1]);
+
+	let backgroundtop;
+	try {
+		backgroundtop = document.getElementById("chatop"+msg[0]);
+	} catch (error) {
+		console.warn(error)
+	}
+	backgroundtop.setAttribute("color", aihint[1]);
 
 	console.log("drawbackground",background,aihint[1])
-	background.setAttribute("color", aihint[1]);
+});
+
+socket.on("broadcast_room_rgba", (msg) => {
+	//SERVER.emit('broadcast_room_rgba', [roomId,aihint]);
+	console.log("AI救我",msg[0],msg[1])
+	let background;
+	try {
+		background = document.getElementById("chat"+msg[0]);
+	} catch (error) {
+		console.warn(error)
+	}
+	background.setAttribute("material",`opacity:${msg[1]}`);
+	let backgroundtop;
+	try {
+		backgroundtop = document.getElementById("chatop"+msg[0]);
+	} catch (error) {
+		console.warn(error)
+	}
+	backgroundtop.setAttribute("material",`opacity:${msg[1]}`);
+	
+
+	console.log("drawbackground_rgba",background,msg[1])
 });
 
 
@@ -683,3 +728,22 @@ document.addEventListener("DOMContentLoaded", function () {
     }
 });
 
+// 条件房间背景色 chatroom1-3 material的opacity每秒 -0.01 到0.3为止
+function updateOpacity() {
+    let chatroom1ragb = document.getElementById("chatroom1");
+    let chatroom2ragb = document.getElementById("chatroom2");
+    let chatroom3ragb = document.getElementById("chatroom3");
+
+    if (chatroom1ragb.getAttribute("material").opacity > 0.3) {
+        chatroom1ragb.setAttribute("material", "opacity", chatroom1ragb.getAttribute("material").opacity - 0.01);
+    }
+    if (chatroom2ragb.getAttribute("material").opacity > 0.3) {
+        chatroom2ragb.setAttribute("material", "opacity", chatroom2ragb.getAttribute("material").opacity - 0.01);
+    }
+    if (chatroom3ragb.getAttribute("material").opacity > 0.3) {
+        chatroom3ragb.setAttribute("material", "opacity", chatroom3ragb.getAttribute("material").opacity - 0.01);
+    }
+}
+
+// 每秒执行一次 updateOpacity 函数
+setInterval(updateOpacity, 1000);
